@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, status, Response, Cookie
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -23,6 +23,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import asyncio
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -56,22 +57,28 @@ logger = logging.getLogger(__name__)
 
 # ==================== MODELS ====================
 
-class OTPStore:
-    """In-memory OTP storage (use Redis in production)"""
-    store: Dict[str, Dict] = {}
-
 class UserBase(BaseModel):
     email: EmailStr
-    phone: Optional[str] = None
     name: str
-    language_preference: str = "en"  # en or hi
+    picture: Optional[str] = None
+    language_preference: str = "en"
     business_name: Optional[str] = None
     business_gstin: Optional[str] = None
     business_address: Optional[str] = None
     business_phone: Optional[str] = None
 
+class UserResponse(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    language_preference: str
+    business_name: Optional[str] = None
+    business_gstin: Optional[str] = None
+    subscription_plan: str = "free"
+    created_at: str
+
 class UserProfileUpdate(BaseModel):
-    phone: Optional[str] = None
     name: Optional[str] = None
     language_preference: Optional[str] = None
     business_name: Optional[str] = None
@@ -79,32 +86,8 @@ class UserProfileUpdate(BaseModel):
     business_address: Optional[str] = None
     business_phone: Optional[str] = None
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    name: str
-    otp: str
-
-class UserResponse(BaseModel):
-    id: str
-    email: str
-    name: str
-    language_preference: str
-    business_name: Optional[str] = None
-    business_gstin: Optional[str] = None
-    subscription_plan: str = "free"
-    created_at: str
-
-class SendOTPRequest(BaseModel):
-    email: EmailStr
-
-class VerifyOTPRequest(BaseModel):
-    email: EmailStr
-    otp: str
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
+class GoogleSessionRequest(BaseModel):
+    session_id: str
 
 class BillExtractedData(BaseModel):
     seller_gstin: Optional[str] = None
@@ -197,98 +180,166 @@ class DashboardStats(BaseModel):
     recent_bills: List[BillResponse]
 
 class SubscriptionOrder(BaseModel):
-    plan: str  # "pro" or "business"
-    billing_cycle: str = "monthly"  # monthly or yearly
+    plan: str
+    billing_cycle: str = "monthly"
 
 # ==================== AUTHENTICATION ====================
 
-def create_access_token(data: dict, expires_delta: timedelta = timedelta(days=30)):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(request: Request) -> dict:
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    
-    token = auth_header.split(' ')[1]
+async def get_current_user_from_token(token: str) -> dict:
+    """Get user from session token"""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get('user_id')
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # Find session in database
+        session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid session")
         
-        user = await db.users.find_one({"id": user_id}, {"_id": 0})
+        # Check expiry
+        expires_at = session["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="Session expired")
+        
+        # Get user
+        user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
         if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+            raise HTTPException(status_code=401, detail="User not found")
+        
         return user
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying session: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+async def get_current_user(
+    request: Request,
+    session_token: Optional[str] = Cookie(None)
+) -> dict:
+    """Get current user from cookie or Authorization header"""
+    # Try cookie first
+    if session_token:
+        return await get_current_user_from_token(session_token)
+    
+    # Try Authorization header
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+        return await get_current_user_from_token(token)
+    
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 # ==================== AUTH ENDPOINTS ====================
 
-@api_router.post("/auth/send-otp")
-async def send_otp(request: SendOTPRequest):
-    """Send OTP to email (mock implementation for MVP)"""
-    otp = str(random.randint(100000, 999999))
-    OTPStore.store[request.email] = {
-        "otp": otp,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)
-    }
-    logger.info(f"OTP for {request.email}: {otp}")
-    return {"message": "OTP sent successfully", "otp": otp}  # Remove otp in production
-
-@api_router.post("/auth/verify-otp", response_model=TokenResponse)
-async def verify_otp(request: VerifyOTPRequest):
-    """Verify OTP and login/register user"""
-    stored = OTPStore.store.get(request.email)
-    if not stored or stored['otp'] != request.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-    
-    if datetime.now(timezone.utc) > stored['expires_at']:
-        raise HTTPException(status_code=400, detail="OTP expired")
-    
-    # Check if user exists
-    user = await db.users.find_one({"email": request.email}, {"_id": 0})
-    
-    if not user:
-        # Create new user
-        user_id = str(uuid.uuid4())
-        user = {
-            "id": user_id,
-            "email": request.email,
-            "name": request.email.split('@')[0],
-            "language_preference": "en",
-            "subscription_plan": "free",
-            "bill_count": 0,
+@api_router.post("/auth/google-session")
+async def process_google_session(session_req: GoogleSessionRequest, response: Response):
+    """Process Google session_id and create user session"""
+    try:
+        # Call Emergent Auth API to get user data
+        async with httpx.AsyncClient() as client:
+            auth_response = await client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": session_req.session_id},
+                timeout=10.0
+            )
+            
+            if auth_response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Invalid session ID")
+            
+            user_data = auth_response.json()
+        
+        # Check if user exists
+        existing_user = await db.users.find_one({"email": user_data["email"]}, {"_id": 0})
+        
+        if existing_user:
+            user_id = existing_user["user_id"]
+            # Update user info
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "name": user_data["name"],
+                    "picture": user_data.get("picture"),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+        else:
+            # Create new user with custom user_id
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            new_user = {
+                "user_id": user_id,
+                "email": user_data["email"],
+                "name": user_data["name"],
+                "picture": user_data.get("picture"),
+                "language_preference": "en",
+                "subscription_plan": "free",
+                "bill_count": 0,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.users.insert_one(new_user)
+        
+        # Create session
+        session_token = user_data["session_token"]
+        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        
+        session_doc = {
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": expires_at.isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
-        await db.users.insert_one(user)
-    
-    # Create token
-    token = create_access_token({"user_id": user['id'], "email": user['email']})
-    
-    del OTPStore.store[request.email]
-    
-    return TokenResponse(
-        access_token=token,
-        user=UserResponse(**user)
-    )
+        await db.user_sessions.insert_one(session_doc)
+        
+        # Set httpOnly cookie
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            path="/",
+            max_age=7 * 24 * 60 * 60  # 7 days
+        )
+        
+        # Get full user data
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        
+        return {
+            "user": UserResponse(**user),
+            "session_token": session_token
+        }
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error calling Emergent Auth API: {str(e)}")
+        raise HTTPException(status_code=500, detail="Authentication service unavailable")
+    except Exception as e:
+        logger.error(f"Error processing Google session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):
+    """Get current user info"""
     return UserResponse(**user)
+
+@api_router.post("/auth/logout")
+async def logout(
+    response: Response,
+    user: dict = Depends(get_current_user),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Logout user"""
+    if session_token:
+        await db.user_sessions.delete_one({"session_token": session_token})
+    
+    response.delete_cookie(key="session_token", path="/")
+    return {"message": "Logged out successfully"}
 
 @api_router.put("/auth/profile")
 async def update_profile(profile: UserProfileUpdate, user: dict = Depends(get_current_user)):
+    """Update user profile"""
     update_data = profile.model_dump(exclude_unset=True)
-    await db.users.update_one({"id": user['id']}, {"$set": update_data})
+    await db.users.update_one({"user_id": user['user_id']}, {"$set": update_data})
     return {"message": "Profile updated successfully"}
 
 # ==================== BILL PROCESSING ====================
@@ -319,7 +370,6 @@ async def extract_bill_data(image_base64: str) -> BillExtractedData:
         
         # Parse JSON response
         try:
-            # Remove markdown code blocks if present
             response_text = response.strip()
             if response_text.startswith('```'):
                 response_text = response_text.split('\n', 1)[1].rsplit('\n', 1)[0].strip()
@@ -340,26 +390,16 @@ def convert_to_base64(file_content: bytes, file_type: str) -> str:
     """Convert image or PDF to base64"""
     try:
         if file_type.lower() == 'pdf':
-            # Extract first page of PDF as image
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
-            if len(pdf_reader.pages) == 0:
-                raise Exception("PDF has no pages")
-            # For MVP, we'll just encode the PDF itself
-            # In production, convert PDF page to image
             return base64.b64encode(file_content).decode('utf-8')
         else:
-            # Image file
             img = Image.open(io.BytesIO(file_content))
-            # Convert to RGB if needed
             if img.mode != 'RGB':
                 img = img.convert('RGB')
-            # Resize if too large
             max_size = 2048
             if max(img.size) > max_size:
                 ratio = max_size / max(img.size)
                 new_size = tuple(int(dim * ratio) for dim in img.size)
                 img = img.resize(new_size, Image.Resampling.LANCZOS)
-            # Convert to base64
             buffered = io.BytesIO()
             img.save(buffered, format="JPEG", quality=85)
             return base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -373,37 +413,29 @@ async def upload_bill(
     user: dict = Depends(get_current_user)
 ):
     """Upload and process bill"""
-    # Check subscription limits
     if user.get('subscription_plan') == 'free' and user.get('bill_count', 0) >= 20:
         raise HTTPException(status_code=403, detail="Free plan limit reached. Upgrade to Pro for unlimited uploads.")
     
-    # Validate file type
     allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, and PDF are allowed.")
     
     try:
-        # Read file
         file_content = await file.read()
         file_type = 'pdf' if file.content_type == 'application/pdf' else 'image'
         
-        # Save file
         file_id = str(uuid.uuid4())
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
         file_path = UPLOADS_DIR / f"{file_id}.{file_ext}"
         with open(file_path, 'wb') as f:
             f.write(file_content)
         
-        # Convert to base64 for OCR
         image_base64 = convert_to_base64(file_content, file_type)
-        
-        # Extract data using OCR
         extracted_data = await extract_bill_data(image_base64)
         
-        # Save bill record
         bill = {
             "id": file_id,
-            "user_id": user['id'],
+            "user_id": user['user_id'],
             "file_name": file.filename,
             "file_path": str(file_path),
             "file_type": file_type,
@@ -413,23 +445,21 @@ async def upload_bill(
         }
         await db.bills.insert_one(bill)
         
-        # Update bill count
         await db.users.update_one(
-            {"id": user['id']},
+            {"user_id": user['user_id']},
             {"$inc": {"bill_count": 1}}
         )
         
-        # Create/update customer if needed
         if extracted_data.buyer_name:
             existing_customer = await db.customers.find_one({
-                "user_id": user['id'],
+                "user_id": user['user_id'],
                 "name": extracted_data.buyer_name
             }, {"_id": 0})
             
             if not existing_customer:
                 customer = {
                     "id": str(uuid.uuid4()),
-                    "user_id": user['id'],
+                    "user_id": user['user_id'],
                     "name": extracted_data.buyer_name,
                     "gstin": extracted_data.buyer_gstin,
                     "total_purchases": extracted_data.total_amount or 0.0,
@@ -456,7 +486,7 @@ async def get_bills(
 ):
     """Get all bills for user"""
     bills = await db.bills.find(
-        {"user_id": user['id']},
+        {"user_id": user['user_id']},
         {"_id": 0}
     ).sort("upload_date", -1).skip(skip).limit(limit).to_list(limit)
     return [BillResponse(**bill) for bill in bills]
@@ -464,7 +494,7 @@ async def get_bills(
 @api_router.get("/bills/{bill_id}", response_model=BillResponse)
 async def get_bill(bill_id: str, user: dict = Depends(get_current_user)):
     """Get single bill"""
-    bill = await db.bills.find_one({"id": bill_id, "user_id": user['id']}, {"_id": 0})
+    bill = await db.bills.find_one({"id": bill_id, "user_id": user['user_id']}, {"_id": 0})
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
     return BillResponse(**bill)
@@ -475,18 +505,17 @@ async def update_bill(
     extracted_data: BillExtractedData,
     user: dict = Depends(get_current_user)
 ):
-    """Update bill extracted data (manual correction)"""
+    """Update bill extracted data"""
     result = await db.bills.update_one(
-        {"id": bill_id, "user_id": user['id']},
+        {"id": bill_id, "user_id": user['user_id']},
         {"$set": {"extracted_data": extracted_data.model_dump()}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Bill not found")
     
-    # Log audit
     await db.audit_logs.insert_one({
         "id": str(uuid.uuid4()),
-        "user_id": user['id'],
+        "user_id": user['user_id'],
         "action": "update_bill",
         "entity_type": "bill",
         "entity_id": bill_id,
@@ -498,11 +527,10 @@ async def update_bill(
 @api_router.delete("/bills/{bill_id}")
 async def delete_bill(bill_id: str, user: dict = Depends(get_current_user)):
     """Delete bill"""
-    bill = await db.bills.find_one({"id": bill_id, "user_id": user['id']}, {"_id": 0})
+    bill = await db.bills.find_one({"id": bill_id, "user_id": user['user_id']}, {"_id": 0})
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
     
-    # Delete file
     file_path = Path(bill['file_path'])
     if file_path.exists():
         file_path.unlink()
@@ -520,7 +548,7 @@ async def get_ledger(
     user: dict = Depends(get_current_user)
 ):
     """Get ledger entries"""
-    query = {"user_id": user['id']}
+    query = {"user_id": user['user_id']}
     
     bills = await db.bills.find(query, {"_id": 0}).sort("upload_date", -1).to_list(1000)
     
@@ -549,24 +577,21 @@ async def export_ledger(
     user: dict = Depends(get_current_user)
 ):
     """Export ledger to Excel or CSV"""
-    bills = await db.bills.find({"user_id": user['id']}, {"_id": 0}).sort("upload_date", -1).to_list(1000)
+    bills = await db.bills.find({"user_id": user['user_id']}, {"_id": 0}).sort("upload_date", -1).to_list(1000)
     
     if format == "xlsx":
         wb = Workbook()
         ws = wb.active
         ws.title = "Ledger"
         
-        # Headers
         headers = ["Date", "Customer", "Invoice No", "Products", "Subtotal", "CGST", "SGST", "IGST", "Total GST", "Total Amount"]
         ws.append(headers)
         
-        # Style headers
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.fill = PatternFill(start_color="0F766E", end_color="0F766E", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
-        # Data
         for bill in bills:
             data = bill.get('extracted_data', {})
             if data:
@@ -583,7 +608,6 @@ async def export_ledger(
                     data.get('total_amount', 0)
                 ])
         
-        # Save to bytes
         excel_file = io.BytesIO()
         wb.save(excel_file)
         excel_file.seek(0)
@@ -603,7 +627,7 @@ async def create_customer(customer: CustomerBase, user: dict = Depends(get_curre
     customer_data = customer.model_dump()
     customer_data.update({
         "id": str(uuid.uuid4()),
-        "user_id": user['id'],
+        "user_id": user['user_id'],
         "total_purchases": 0.0,
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -612,7 +636,7 @@ async def create_customer(customer: CustomerBase, user: dict = Depends(get_curre
 
 @api_router.get("/customers", response_model=List[CustomerResponse])
 async def get_customers(user: dict = Depends(get_current_user)):
-    customers = await db.customers.find({"user_id": user['id']}, {"_id": 0}).to_list(1000)
+    customers = await db.customers.find({"user_id": user['user_id']}, {"_id": 0}).to_list(1000)
     return [CustomerResponse(**c) for c in customers]
 
 @api_router.put("/customers/{customer_id}")
@@ -622,7 +646,7 @@ async def update_customer(
     user: dict = Depends(get_current_user)
 ):
     result = await db.customers.update_one(
-        {"id": customer_id, "user_id": user['id']},
+        {"id": customer_id, "user_id": user['user_id']},
         {"$set": customer.model_dump(exclude_unset=True)}
     )
     if result.matched_count == 0:
@@ -631,7 +655,7 @@ async def update_customer(
 
 @api_router.delete("/customers/{customer_id}")
 async def delete_customer(customer_id: str, user: dict = Depends(get_current_user)):
-    result = await db.customers.delete_one({"id": customer_id, "user_id": user['id']}
+    result = await db.customers.delete_one({"id": customer_id, "user_id": user['user_id']}
     )
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -644,7 +668,7 @@ async def create_product(product: ProductBase, user: dict = Depends(get_current_
     product_data = product.model_dump()
     product_data.update({
         "id": str(uuid.uuid4()),
-        "user_id": user['id'],
+        "user_id": user['user_id'],
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     await db.products.insert_one(product_data)
@@ -652,7 +676,7 @@ async def create_product(product: ProductBase, user: dict = Depends(get_current_
 
 @api_router.get("/products", response_model=List[ProductResponse])
 async def get_products(user: dict = Depends(get_current_user)):
-    products = await db.products.find({"user_id": user['id']}, {"_id": 0}).to_list(1000)
+    products = await db.products.find({"user_id": user['user_id']}, {"_id": 0}).to_list(1000)
     return [ProductResponse(**p) for p in products]
 
 @api_router.put("/products/{product_id}")
@@ -662,7 +686,7 @@ async def update_product(
     user: dict = Depends(get_current_user)
 ):
     result = await db.products.update_one(
-        {"id": product_id, "user_id": user['id']},
+        {"id": product_id, "user_id": user['user_id']},
         {"$set": product.model_dump(exclude_unset=True)}
     )
     if result.matched_count == 0:
@@ -671,7 +695,7 @@ async def update_product(
 
 @api_router.delete("/products/{product_id}")
 async def delete_product(product_id: str, user: dict = Depends(get_current_user)):
-    result = await db.products.delete_one({"id": product_id, "user_id": user['id']})
+    result = await db.products.delete_one({"id": product_id, "user_id": user['user_id']})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"message": "Product deleted successfully"}
@@ -683,20 +707,15 @@ async def create_invoice(
     invoice_data: InvoiceCreate,
     user: dict = Depends(get_current_user)
 ):
-    # Calculate totals
     subtotal = sum(item.amount for item in invoice_data.items)
     
-    # GST calculation (simplified)
-    # If customer has GSTIN and matches state: CGST+SGST, else IGST
-    gst_rate = 0.18  # 18% standard rate
+    gst_rate = 0.18
     
     if invoice_data.customer_gstin:
-        # Simplified: assume interstate (IGST) for now
         igst = round(subtotal * gst_rate, 2)
         cgst = 0.0
         sgst = 0.0
     else:
-        # No GST if no GSTIN and quantity <= 500kg (handled in frontend)
         cgst = round(subtotal * (gst_rate / 2), 2)
         sgst = round(subtotal * (gst_rate / 2), 2)
         igst = 0.0
@@ -704,13 +723,12 @@ async def create_invoice(
     total_gst = cgst + sgst + igst
     total_amount = subtotal + total_gst
     
-    # Generate invoice number
-    invoice_count = await db.invoices.count_documents({"user_id": user['id']})
-    invoice_number = f"INV-{user['id'][:8].upper()}-{invoice_count + 1:04d}"
+    invoice_count = await db.invoices.count_documents({"user_id": user['user_id']})
+    invoice_number = f"INV-{user['user_id'][:8].upper()}-{invoice_count + 1:04d}"
     
     invoice = {
         "id": str(uuid.uuid4()),
-        "user_id": user['id'],
+        "user_id": user['user_id'],
         "invoice_number": invoice_number,
         "invoice_date": datetime.now(timezone.utc).isoformat(),
         "customer_id": invoice_data.customer_id,
@@ -738,14 +756,14 @@ async def get_invoices(
     user: dict = Depends(get_current_user)
 ):
     invoices = await db.invoices.find(
-        {"user_id": user['id']},
+        {"user_id": user['user_id']},
         {"_id": 0}
     ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [InvoiceResponse(**inv) for inv in invoices]
 
 @api_router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
-    invoice = await db.invoices.find_one({"id": invoice_id, "user_id": user['id']}, {"_id": 0})
+    invoice = await db.invoices.find_one({"id": invoice_id, "user_id": user['user_id']}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return InvoiceResponse(**invoice)
@@ -754,12 +772,10 @@ async def get_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(user: dict = Depends(get_current_user)):
-    # Get counts
-    total_bills = await db.bills.count_documents({"user_id": user['id']})
-    total_customers = await db.customers.count_documents({"user_id": user['id']})
+    total_bills = await db.bills.count_documents({"user_id": user['user_id']})
+    total_customers = await db.customers.count_documents({"user_id": user['user_id']})
     
-    # Get bills for calculations
-    bills = await db.bills.find({"user_id": user['id']}, {"_id": 0}).to_list(1000)
+    bills = await db.bills.find({"user_id": user['user_id']}, {"_id": 0}).to_list(1000)
     
     total_sales = 0.0
     total_gst = 0.0
@@ -777,15 +793,13 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
             total_sales += amount
             total_gst += gst
             
-            # Check if current month
             bill_date = datetime.fromisoformat(bill['upload_date'])
             if bill_date.month == current_month and bill_date.year == current_year:
                 monthly_sales += amount
                 monthly_gst += gst
     
-    # Get recent bills
     recent_bills_data = await db.bills.find(
-        {"user_id": user['id']},
+        {"user_id": user['user_id']},
         {"_id": 0}
     ).sort("upload_date", -1).limit(5).to_list(5)
     
@@ -812,10 +826,9 @@ async def create_subscription_order(
     if not razorpay_client:
         raise HTTPException(status_code=500, detail="Payment gateway not configured")
     
-    # Plan pricing (in paise)
     pricing = {
-        "pro": {"monthly": 49900, "yearly": 499900},  # ₹499/month, ₹4999/year
-        "business": {"monthly": 99900, "yearly": 999900}  # ₹999/month, ₹9999/year
+        "pro": {"monthly": 49900, "yearly": 499900},
+        "business": {"monthly": 99900, "yearly": 999900}
     }
     
     amount = pricing.get(order.plan, {}).get(order.billing_cycle, 0)
@@ -829,10 +842,9 @@ async def create_subscription_order(
             "payment_capture": 1
         })
         
-        # Save transaction
         transaction = {
             "id": str(uuid.uuid4()),
-            "user_id": user['id'],
+            "user_id": user['user_id'],
             "order_id": razorpay_order['id'],
             "plan": order.plan,
             "billing_cycle": order.billing_cycle,
@@ -864,14 +876,12 @@ async def verify_subscription(
         raise HTTPException(status_code=500, detail="Payment gateway not configured")
     
     try:
-        # Verify signature
         razorpay_client.utility.verify_payment_signature({
             'razorpay_order_id': order_id,
             'razorpay_payment_id': payment_id,
             'razorpay_signature': signature
         })
         
-        # Update transaction
         transaction = await db.transactions.find_one({"order_id": order_id}, {"_id": 0})
         if not transaction:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -881,9 +891,8 @@ async def verify_subscription(
             {"$set": {"status": "completed", "payment_id": payment_id}}
         )
         
-        # Update user subscription
         await db.users.update_one(
-            {"id": user['id']},
+            {"user_id": user['user_id']},
             {"$set": {"subscription_plan": transaction['plan']}}
         )
         

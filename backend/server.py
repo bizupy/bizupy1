@@ -286,7 +286,7 @@ async def get_me(user: dict = Depends(get_current_user)):
     return UserResponse(**user)
 
 @api_router.put("/auth/profile")
-async def update_profile(profile: UserBase, user: dict = Depends(get_current_user)):
+async def update_profile(profile: UserProfileUpdate, user: dict = Depends(get_current_user)):
     update_data = profile.model_dump(exclude_unset=True)
     await db.users.update_one({"id": user['id']}, {"$set": update_data})
     return {"message": "Profile updated successfully"}

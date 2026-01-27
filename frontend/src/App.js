@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
@@ -7,6 +7,7 @@ import './index.css';
 
 // Pages
 import LandingPage from './pages/LandingPage';
+import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import Bills from './pages/Bills';
 import Ledger from './pages/Ledger';
@@ -20,8 +21,28 @@ import AppLayout from './components/Layout/AppLayout';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   
-  if (loading) {
+  // If user data passed from AuthCallback, render immediately
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    location.state?.user ? true : null
+  );
+
+  React.useEffect(() => {
+    // Skip check if user data already passed from AuthCallback
+    if (location.state?.user) {
+      setIsAuthenticated(true);
+      return;
+    }
+
+    // Check authentication status
+    if (!loading) {
+      setIsAuthenticated(user ? true : false);
+    }
+  }, [user, loading, location.state]);
+  
+  // Show loading while checking
+  if (isAuthenticated === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -32,14 +53,21 @@ const ProtectedRoute = ({ children }) => {
     );
   }
   
-  if (!user) {
+  if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
   
   return children;
 };
 
-function AppRoutes() {
+function AppRouter() {
+  const location = useLocation();
+  
+  // Check URL fragment (not query params) for session_id - MUST be synchronous
+  if (location.hash?.includes('session_id=')) {
+    return <AuthCallback />;
+  }
+  
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -121,7 +149,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <AppRoutes />
+        <AppRouter />
         <Toaster position="top-right" />
       </BrowserRouter>
     </AuthProvider>

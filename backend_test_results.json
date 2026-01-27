@@ -1,0 +1,158 @@
+{
+  "timestamp": "2026-01-27T17:32:58.188077",
+  "total_tests": 25,
+  "passed_tests": 24,
+  "success_rate": 96.0,
+  "test_details": [
+    {
+      "test": "Send OTP",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:49.887637"
+    },
+    {
+      "test": "Verify OTP and Login",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:49.956895"
+    },
+    {
+      "test": "Get Current User",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:49.997845"
+    },
+    {
+      "test": "Get Dashboard Stats",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:50.040836"
+    },
+    {
+      "test": "Dashboard stats contains total_bills",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:50.041404"
+    },
+    {
+      "test": "Dashboard stats contains total_customers",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:50.041412"
+    },
+    {
+      "test": "Dashboard stats contains total_sales",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:50.041415"
+    },
+    {
+      "test": "Dashboard stats contains total_gst",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:50.041420"
+    },
+    {
+      "test": "Upload Bill with OCR",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.315436"
+    },
+    {
+      "test": "Get Single Bill",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.388141"
+    },
+    {
+      "test": "Get All Bills",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.432631"
+    },
+    {
+      "test": "Create Customer",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.545672"
+    },
+    {
+      "test": "Get All Customers",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.587368"
+    },
+    {
+      "test": "Update Customer",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.628631"
+    },
+    {
+      "test": "Delete Customer",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.667784"
+    },
+    {
+      "test": "Create Product",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.785910"
+    },
+    {
+      "test": "Get All Products",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.823592"
+    },
+    {
+      "test": "Update Product",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.860213"
+    },
+    {
+      "test": "Delete Product",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.901565"
+    },
+    {
+      "test": "Create Invoice (Small Quantity)",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:57.968563"
+    },
+    {
+      "test": "Create Invoice (Large Quantity with GSTIN)",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:58.014243"
+    },
+    {
+      "test": "Get All Invoices",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:58.053991"
+    },
+    {
+      "test": "Get Ledger Entries",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:58.093602"
+    },
+    {
+      "test": "Export Ledger to Excel",
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:32:58.146883"
+    },
+    {
+      "test": "Update Profile",
+      "success": false,
+      "details": "Expected 200, got 422 - [{'type': 'missing', 'loc': ['body', 'email'], 'msg': 'Field required', 'input': {'name': 'Updated Test User', 'phone': '9876543210', 'language_preference': 'hi', 'business_name': 'Test Business', 'business_gstin': '12ABCDE1234F1Z5', 'business_address': 'Test Business Address', 'business_phone': '9876543211'}, 'url': 'https://errors.pydantic.dev/2.12/v/missing'}]",
+      "timestamp": "2026-01-27T17:32:58.187440"
+    }
+  ]
+}

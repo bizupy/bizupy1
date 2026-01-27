@@ -70,6 +70,15 @@ class UserBase(BaseModel):
     business_address: Optional[str] = None
     business_phone: Optional[str] = None
 
+class UserProfileUpdate(BaseModel):
+    phone: Optional[str] = None
+    name: Optional[str] = None
+    language_preference: Optional[str] = None
+    business_name: Optional[str] = None
+    business_gstin: Optional[str] = None
+    business_address: Optional[str] = None
+    business_phone: Optional[str] = None
+
 class UserCreate(BaseModel):
     email: EmailStr
     name: str

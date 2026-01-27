@@ -1,158 +1,158 @@
 {
-  "timestamp": "2026-01-27T17:32:58.188077",
+  "timestamp": "2026-01-27T17:33:37.699947",
   "total_tests": 25,
-  "passed_tests": 24,
-  "success_rate": 96.0,
+  "passed_tests": 25,
+  "success_rate": 100.0,
   "test_details": [
     {
       "test": "Send OTP",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:49.887637"
+      "timestamp": "2026-01-27T17:33:31.169347"
     },
     {
       "test": "Verify OTP and Login",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:49.956895"
+      "timestamp": "2026-01-27T17:33:31.211914"
     },
     {
       "test": "Get Current User",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:49.997845"
+      "timestamp": "2026-01-27T17:33:31.249225"
     },
     {
       "test": "Get Dashboard Stats",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:50.040836"
+      "timestamp": "2026-01-27T17:33:31.291599"
     },
     {
       "test": "Dashboard stats contains total_bills",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:50.041404"
+      "timestamp": "2026-01-27T17:33:31.292213"
     },
     {
       "test": "Dashboard stats contains total_customers",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:50.041412"
+      "timestamp": "2026-01-27T17:33:31.292221"
     },
     {
       "test": "Dashboard stats contains total_sales",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:50.041415"
+      "timestamp": "2026-01-27T17:33:31.292225"
     },
     {
       "test": "Dashboard stats contains total_gst",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:50.041420"
+      "timestamp": "2026-01-27T17:33:31.292231"
     },
     {
       "test": "Upload Bill with OCR",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.315436"
+      "timestamp": "2026-01-27T17:33:36.986637"
     },
     {
       "test": "Get Single Bill",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.388141"
+      "timestamp": "2026-01-27T17:33:37.043503"
     },
     {
       "test": "Get All Bills",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.432631"
+      "timestamp": "2026-01-27T17:33:37.083543"
     },
     {
       "test": "Create Customer",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.545672"
+      "timestamp": "2026-01-27T17:33:37.124019"
     },
     {
       "test": "Get All Customers",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.587368"
+      "timestamp": "2026-01-27T17:33:37.160069"
     },
     {
       "test": "Update Customer",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.628631"
+      "timestamp": "2026-01-27T17:33:37.194736"
     },
     {
       "test": "Delete Customer",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.667784"
+      "timestamp": "2026-01-27T17:33:37.228625"
     },
     {
       "test": "Create Product",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.785910"
+      "timestamp": "2026-01-27T17:33:37.266521"
     },
     {
       "test": "Get All Products",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.823592"
+      "timestamp": "2026-01-27T17:33:37.344345"
     },
     {
       "test": "Update Product",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.860213"
+      "timestamp": "2026-01-27T17:33:37.388830"
     },
     {
       "test": "Delete Product",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.901565"
+      "timestamp": "2026-01-27T17:33:37.420634"
     },
     {
       "test": "Create Invoice (Small Quantity)",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:57.968563"
+      "timestamp": "2026-01-27T17:33:37.459978"
     },
     {
       "test": "Create Invoice (Large Quantity with GSTIN)",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:58.014243"
+      "timestamp": "2026-01-27T17:33:37.498523"
     },
     {
       "test": "Get All Invoices",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:58.053991"
+      "timestamp": "2026-01-27T17:33:37.533631"
     },
     {
       "test": "Get Ledger Entries",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:58.093602"
+      "timestamp": "2026-01-27T17:33:37.574702"
     },
     {
       "test": "Export Ledger to Excel",
       "success": true,
       "details": "",
-      "timestamp": "2026-01-27T17:32:58.146883"
+      "timestamp": "2026-01-27T17:33:37.662439"
     },
     {
       "test": "Update Profile",
-      "success": false,
-      "details": "Expected 200, got 422 - [{'type': 'missing', 'loc': ['body', 'email'], 'msg': 'Field required', 'input': {'name': 'Updated Test User', 'phone': '9876543210', 'language_preference': 'hi', 'business_name': 'Test Business', 'business_gstin': '12ABCDE1234F1Z5', 'business_address': 'Test Business Address', 'business_phone': '9876543211'}, 'url': 'https://errors.pydantic.dev/2.12/v/missing'}]",
-      "timestamp": "2026-01-27T17:32:58.187440"
+      "success": true,
+      "details": "",
+      "timestamp": "2026-01-27T17:33:37.699259"
     }
   ]
 }

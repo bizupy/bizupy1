@@ -10,6 +10,7 @@ import { api } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 
 const Invoices = () => {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);

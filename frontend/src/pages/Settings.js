@@ -151,6 +151,35 @@ const Settings = () => {
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-xl font-semibold font-manrope text-slate-900 mb-6">Business Information</h2>
         <div className="space-y-4">
+          {/* Logo Upload */}
+          <div>
+            <Label htmlFor="business_logo">Business Logo</Label>
+            <div className="mt-2 flex items-center gap-4">
+              {user?.business_logo && (
+                <img 
+                  src={`${process.env.REACT_APP_BACKEND_URL}${user.business_logo}`}
+                  alt="Business Logo" 
+                  className="h-20 w-20 object-contain border border-slate-200 rounded"
+                  onError={(e) => e.target.style.display = 'none'}
+                />
+              )}
+              <div>
+                <Input
+                  id="business_logo"
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleLogoUpload}
+                  disabled={uploadingLogo}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  JPG, PNG, or WEBP. Max 5MB. Will be resized to 400x400px.
+                </p>
+                {uploadingLogo && <p className="text-xs text-primary mt-1">Uploading...</p>}
+              </div>
+            </div>
+          </div>
+          
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="business_name">Business Name</Label>

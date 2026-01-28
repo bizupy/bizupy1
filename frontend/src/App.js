@@ -113,6 +113,14 @@ function AppRouter() {
         }
       />
       <Route
+        path="/invoices/:invoiceId"
+        element={
+          <ProtectedRoute>
+            <InvoiceView />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/customers"
         element={
           <ProtectedRoute>

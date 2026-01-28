@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard';
 import Bills from './pages/Bills';
 import Ledger from './pages/Ledger';
 import Invoices from './pages/Invoices';
+import InvoiceView from './pages/InvoiceView';
 import Customers from './pages/Customers';
 import Products from './pages/Products';
 import Settings from './pages/Settings';

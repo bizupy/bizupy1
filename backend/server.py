@@ -240,6 +240,8 @@ async def get_current_user(
 async def process_google_session(session_req: GoogleSessionRequest, response: Response):
     """Process Google session_id and create user session"""
     try:
+        logger.info(f"Processing Google session: {session_req.session_id[:20]}...")
+        
         # Call Emergent Auth API to get user data
         async with httpx.AsyncClient() as client:
             auth_response = await client.get(
@@ -248,21 +250,35 @@ async def process_google_session(session_req: GoogleSessionRequest, response: Re
                 timeout=10.0
             )
             
+            logger.info(f"Emergent Auth API response status: {auth_response.status_code}")
+            
             if auth_response.status_code != 200:
-                raise HTTPException(status_code=400, detail="Invalid session ID")
+                logger.error(f"Emergent Auth API error: {auth_response.text}")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid session ID or authentication failed: {auth_response.text}"
+                )
             
             user_data = auth_response.json()
+            logger.info(f"User data received for: {user_data.get('email', 'unknown')}")
+        
+        # Validate required fields
+        if not user_data.get('email'):
+            raise HTTPException(status_code=400, detail="No email in user data")
+        if not user_data.get('session_token'):
+            raise HTTPException(status_code=400, detail="No session token in user data")
         
         # Check if user exists
         existing_user = await db.users.find_one({"email": user_data["email"]}, {"_id": 0})
         
         if existing_user:
             user_id = existing_user["user_id"]
+            logger.info(f"Existing user found: {user_id}")
             # Update user info
             await db.users.update_one(
                 {"user_id": user_id},
                 {"$set": {
-                    "name": user_data["name"],
+                    "name": user_data.get("name", existing_user.get("name")),
                     "picture": user_data.get("picture"),
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }}
@@ -270,10 +286,11 @@ async def process_google_session(session_req: GoogleSessionRequest, response: Re
         else:
             # Create new user with custom user_id
             user_id = f"user_{uuid.uuid4().hex[:12]}"
+            logger.info(f"Creating new user: {user_id}")
             new_user = {
                 "user_id": user_id,
                 "email": user_data["email"],
-                "name": user_data["name"],
+                "name": user_data.get("name", user_data["email"].split('@')[0]),
                 "picture": user_data.get("picture"),
                 "language_preference": "en",
                 "subscription_plan": "free",
@@ -286,6 +303,9 @@ async def process_google_session(session_req: GoogleSessionRequest, response: Re
         session_token = user_data["session_token"]
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
         
+        # Delete old sessions for this user
+        await db.user_sessions.delete_many({"user_id": user_id})
+        
         session_doc = {
             "user_id": user_id,
             "session_token": session_token,
@@ -293,6 +313,7 @@ async def process_google_session(session_req: GoogleSessionRequest, response: Re
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.user_sessions.insert_one(session_doc)
+        logger.info(f"Session created for user: {user_id}")
         
         # Set httpOnly cookie
         response.set_cookie(
@@ -308,17 +329,28 @@ async def process_google_session(session_req: GoogleSessionRequest, response: Re
         # Get full user data
         user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
         
+        logger.info(f"Authentication successful for: {user['email']}")
+        
         return {
             "user": UserResponse(**user),
-            "session_token": session_token
+            "session_token": session_token,
+            "message": "Authentication successful"
         }
         
     except httpx.RequestError as e:
         logger.error(f"Error calling Emergent Auth API: {str(e)}")
-        raise HTTPException(status_code=500, detail="Authentication service unavailable")
+        raise HTTPException(
+            status_code=503, 
+            detail="Authentication service unavailable. Please try again later."
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error processing Google session: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error processing Google session: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Authentication error: {str(e)}"
+        )
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):

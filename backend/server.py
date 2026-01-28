@@ -335,6 +335,46 @@ async def logout(
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
+@api_router.post("/auth/upload-logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """Upload business logo"""
+    allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, and WEBP are allowed.")
+    
+    try:
+        file_content = await file.read()
+        
+        # Optimize and resize image
+        img = Image.open(io.BytesIO(file_content))
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Resize to max 400x400 for logo
+        max_size = 400
+        img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        
+        # Save optimized logo
+        logo_id = f"logo_{user['user_id']}"
+        logo_path = UPLOADS_DIR / f"{logo_id}.jpg"
+        img.save(logo_path, format='JPEG', quality=90, optimize=True)
+        
+        # Update user profile with logo path
+        logo_url = f"/uploads/{logo_id}.jpg"
+        await db.users.update_one(
+            {"user_id": user['user_id']},
+            {"$set": {"business_logo": logo_url}}
+        )
+        
+        return {"message": "Logo uploaded successfully", "logo_url": logo_url}
+        
+    except Exception as e:
+        logger.error(f"Error uploading logo: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error uploading logo")
+
 @api_router.put("/auth/profile")
 async def update_profile(profile: UserProfileUpdate, user: dict = Depends(get_current_user)):
     """Update user profile"""

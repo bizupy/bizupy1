@@ -950,6 +950,15 @@ async def verify_subscription(
 # Include router
 app.include_router(api_router)
 
+# Serve uploaded files
+@app.get(\"/uploads/{filename}\")
+async def get_upload(filename: str):
+    \"\"\"Serve uploaded files\"\"\"
+    file_path = UPLOADS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=\"File not found\")
+    return FileResponse(file_path)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

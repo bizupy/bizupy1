@@ -76,6 +76,7 @@ class UserResponse(BaseModel):
     language_preference: str
     business_name: Optional[str] = None
     business_gstin: Optional[str] = None
+    business_logo: Optional[str] = None
     subscription_plan: str = "free"
     created_at: str
 

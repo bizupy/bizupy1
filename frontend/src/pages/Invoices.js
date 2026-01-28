@@ -137,7 +137,8 @@ const Invoices = () => {
             <div
               key={invoice.id}
               data-testid={`invoice-card-${invoice.id}`}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow"
+              onClick={() => navigate(`/invoices/${invoice.id}`)}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-primary-300 transition-all cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="h-10 w-10 rounded-md bg-primary-100 flex items-center justify-center">

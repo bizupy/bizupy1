@@ -66,6 +66,7 @@ class UserBase(BaseModel):
     business_gstin: Optional[str] = None
     business_address: Optional[str] = None
     business_phone: Optional[str] = None
+    business_logo: Optional[str] = None
 
 class UserResponse(BaseModel):
     user_id: str

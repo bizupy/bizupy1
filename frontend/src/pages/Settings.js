@@ -20,6 +20,8 @@ const Settings = () => {
     business_address: user?.business_address || '',
     business_phone: user?.business_phone || ''
   });
+  const [logoFile, setLogoFile] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const handleUpdateProfile = async () => {
     try {

@@ -17,6 +17,8 @@ const AppLayout = ({ children }) => {
     { name: 'Invoices', href: '/invoices', icon: Receipt },
     { name: 'Customers', href: '/customers', icon: Users },
     { name: 'Products', href: '/products', icon: Package },
+    { name: 'WhatsApp Expense', href: '/whatsapp-expense', icon: MessageSquare },
+    { name: 'Analysis', href: '/analysis', icon: TrendingUp },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 

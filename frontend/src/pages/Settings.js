@@ -18,7 +18,8 @@ const Settings = () => {
     business_name: user?.business_name || '',
     business_gstin: user?.business_gstin || '',
     business_address: user?.business_address || '',
-    business_phone: user?.business_phone || ''
+    business_phone: user?.business_phone || '',
+    whatsapp_expense_number: user?.whatsapp_expense_number || ''
   });
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);

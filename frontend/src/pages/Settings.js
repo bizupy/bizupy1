@@ -223,6 +223,19 @@ const Settings = () => {
               placeholder="Your business phone"
             />
           </div>
+          <div>
+            <Label htmlFor="whatsapp_expense_number">WhatsApp Expense Inbox (Optional)</Label>
+            <Input
+              id="whatsapp_expense_number"
+              data-testid="whatsapp-expense-number"
+              value={formData.whatsapp_expense_number}
+              onChange={(e) => setFormData({...formData, whatsapp_expense_number: e.target.value})}
+              placeholder="WhatsApp number for expense tracking"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Configure this to enable WhatsApp-based expense tracking
+            </p>
+          </div>
           <Button
             data-testid="update-profile-btn"
             onClick={handleUpdateProfile}

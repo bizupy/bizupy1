@@ -980,6 +980,106 @@ async def verify_subscription(
         logger.error(f"Error verifying payment: {str(e)}")
         raise HTTPException(status_code=500, detail="Error verifying payment")
 
+# ==================== ANALYSIS ====================
+
+@api_router.get("/analysis/summary")
+async def get_analysis_summary(
+    type: str,
+    start_date: str,
+    end_date: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get analysis summary for selected data type and date range"""
+    try:
+        # Parse dates
+        start = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+        end = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        
+        result = {
+            "total_amount": 0.0,
+            "count": 0,
+            "breakdown": {}
+        }
+        
+        if type == "invoices":
+            # Query invoices
+            invoices = await db.invoices.find({
+                "user_id": user['user_id'],
+                "invoice_date": {
+                    "$gte": start.isoformat(),
+                    "$lte": end.isoformat()
+                }
+            }, {"_id": 0}).to_list(1000)
+            
+            result["count"] = len(invoices)
+            result["total_amount"] = sum(inv.get("total_amount", 0) for inv in invoices)
+            
+            # Daily breakdown
+            daily_map = {}
+            customer_map = {}
+            for inv in invoices:
+                date_key = inv["invoice_date"][:10]
+                daily_map[date_key] = daily_map.get(date_key, {"total": 0, "count": 0})
+                daily_map[date_key]["total"] += inv.get("total_amount", 0)
+                daily_map[date_key]["count"] += 1
+                
+                customer = inv.get("customer_name", "Unknown")
+                customer_map[customer] = customer_map.get(customer, {"total": 0, "count": 0})
+                customer_map[customer]["total"] += inv.get("total_amount", 0)
+                customer_map[customer]["count"] += 1
+            
+            result["breakdown"]["daily"] = [
+                {"date": date, "total": data["total"], "count": data["count"]}
+                for date, data in sorted(daily_map.items())
+            ]
+            result["breakdown"]["by_customer"] = [
+                {"customer": cust, "total": data["total"], "count": data["count"]}
+                for cust, data in sorted(customer_map.items(), key=lambda x: x[1]["total"], reverse=True)
+            ][:10]  # Top 10
+            
+        elif type == "bills":
+            # Query bills (purchases/ledger)
+            bills = await db.bills.find({
+                "user_id": user['user_id'],
+                "upload_date": {
+                    "$gte": start.isoformat(),
+                    "$lte": end.isoformat()
+                }
+            }, {"_id": 0}).to_list(1000)
+            
+            result["count"] = len(bills)
+            
+            # Calculate total from extracted data
+            daily_map = {}
+            for bill in bills:
+                extracted = bill.get("extracted_data", {})
+                amount = extracted.get("total_amount", 0) or 0
+                result["total_amount"] += amount
+                
+                date_key = bill["upload_date"][:10]
+                daily_map[date_key] = daily_map.get(date_key, {"total": 0, "count": 0})
+                daily_map[date_key]["total"] += amount
+                daily_map[date_key]["count"] += 1
+            
+            result["breakdown"]["daily"] = [
+                {"date": date, "total": data["total"], "count": data["count"]}
+                for date, data in sorted(daily_map.items())
+            ]
+            
+        elif type == "expenses":
+            # Query expenses (placeholder - returns empty for now)
+            # This will be implemented when expense feature is fully built
+            result["count"] = 0
+            result["total_amount"] = 0.0
+            result["breakdown"]["daily"] = []
+            result["breakdown"]["by_category"] = []
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+
 # Include router
 app.include_router(api_router)
 

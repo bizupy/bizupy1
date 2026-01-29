@@ -143,6 +143,26 @@ function AppRouter() {
         }
       />
       <Route
+        path="/whatsapp-expense"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <WhatsAppExpense />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analysis"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Analysis />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings"
         element={
           <ProtectedRoute>

@@ -15,6 +15,8 @@ import Invoices from './pages/Invoices';
 import InvoiceView from './pages/InvoiceView';
 import Customers from './pages/Customers';
 import Products from './pages/Products';
+import WhatsAppExpense from './pages/WhatsAppExpense';
+import Analysis from './pages/Analysis';
 import Settings from './pages/Settings';
 
 // Layout

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, FileText, BookOpen, Receipt, Users, Package, Settings, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, BookOpen, Receipt, Users, Package, Settings, LogOut, Menu, X, MessageSquare, TrendingUp } from 'lucide-react';
 import { Button } from '../ui/button';
 
 const AppLayout = ({ children }) => {

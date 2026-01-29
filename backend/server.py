@@ -87,6 +87,7 @@ class UserProfileUpdate(BaseModel):
     business_gstin: Optional[str] = None
     business_address: Optional[str] = None
     business_phone: Optional[str] = None
+    whatsapp_expense_number: Optional[str] = None
     business_logo: Optional[str] = None
 
 class GoogleSessionRequest(BaseModel):
